@@ -1,53 +1,60 @@
-// SPDX-License-Identifier: MIT pragma solidity ^0.8.26;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol"; import "@openzeppelin/contracts/access/Ownable.sol"; import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
 
-contract RANToken is ERC20, Ownable, ReentrancyGuard { uint256 public constant BURN_FEE = 2; // 2% burn fee uint256 public constant LIQUIDITY_FEE = 1; // 1% liquidity fee uint256 public constant MAX_TX_AMOUNT = 10000 * 10**18; // Transaction limit uint256 public constant ANNUAL_INTEREST = 7; // 7% staking rewards per year
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-mapping(address => uint256) private _stakingBalances;
-mapping(address => uint256) private _lastStakedTime;
+contract RANToken is ERC20, Ownable, ReentrancyGuard {
+    uint256 public constant BURN_FEE = 2; // 2% такса за изгаряне
+    uint256 public constant LIQUIDITY_FEE = 1; // 1% такса за ликвидност
+    uint256 public constant MAX_TX_AMOUNT = 10000 * 10**18; // Лимит за транзакция
+    uint256 public constant ANNUAL_INTEREST = 7; // 7% годишна лихва за стейкинг
 
-event TokensBurned(address indexed from, uint256 amount);
-event Staked(address indexed staker, uint256 amount);
-event Unstaked(address indexed staker, uint256 amount);
+    mapping(address => uint256) private _stakingBalances;
+    mapping(address => uint256) private _lastStakedTime;
 
-constructor() ERC20("RAN Token", "RAN") {
-    _mint(msg.sender, 1000000 * 10**18); // Initial supply
-}
+    event TokensBurned(address indexed from, uint256 amount);
+    event Staked(address indexed staker, uint256 amount);
+    event Unstaked(address indexed staker, uint256 amount);
 
-function transfer(address recipient, uint256 amount) public override returns (bool) {
-    require(amount <= MAX_TX_AMOUNT, "Transfer amount exceeds limit");
-    
-    uint256 burnAmount = (amount * BURN_FEE) / 100;
-    uint256 liquidityAmount = (amount * LIQUIDITY_FEE) / 100;
-    uint256 transferAmount = amount - burnAmount - liquidityAmount;
-    
-    _burn(msg.sender, burnAmount);
-    emit TokensBurned(msg.sender, burnAmount);
-    
-    super.transfer(recipient, transferAmount);
-    return true;
-}
+    constructor() ERC20("RAN Token", "RAN") Ownable(msg.sender) {
+        _mint(msg.sender, 1000000 * 10**18); // Начално предлагане
+    }
 
-function stake(uint256 amount) external nonReentrant {
-    require(balanceOf(msg.sender) >= amount, "Insufficient balance");
-    _stakingBalances[msg.sender] += amount;
-    _lastStakedTime[msg.sender] = block.timestamp;
-    _burn(msg.sender, amount);
-    emit Staked(msg.sender, amount);
-}
+    function transfer(address recipient, uint256 amount) public override returns (bool) {
+        require(amount <= MAX_TX_AMOUNT, "Transfer amount exceeds limit");
+        
+        uint256 burnAmount = (amount * BURN_FEE) / 100;
+        uint256 liquidityAmount = (amount * LIQUIDITY_FEE) / 100;
+        uint256 transferAmount = amount - burnAmount - liquidityAmount;
+        
+        super.transfer(recipient, transferAmount);
+        _burn(msg.sender, burnAmount);
+        emit TokensBurned(msg.sender, burnAmount);
+        
+        return true;
+    }
 
-function unstake() external nonReentrant {
-    uint256 stakedAmount = _stakingBalances[msg.sender];
-    require(stakedAmount > 0, "No tokens staked");
-    
-    uint256 stakingDuration = block.timestamp - _lastStakedTime[msg.sender];
-    uint256 reward = (stakedAmount * ANNUAL_INTEREST * stakingDuration) / (100 * 365 days);
-    
-    _mint(msg.sender, stakedAmount + reward);
-    _stakingBalances[msg.sender] = 0;
-    emit Unstaked(msg.sender, stakedAmount + reward);
-}
+    function stake(uint256 amount) external nonReentrant {
+        require(balanceOf(msg.sender) >= amount, "Insufficient balance");
+        _stakingBalances[msg.sender] += amount;
+        _lastStakedTime[msg.sender] = block.timestamp;
+        _transfer(msg.sender, address(this), amount);
+        emit Staked(msg.sender, amount);
+    }
 
+    function unstake() external nonReentrant {
+        uint256 stakedAmount = _stakingBalances[msg.sender];
+        require(stakedAmount > 0, "No tokens staked");
+        
+        uint256 stakingDuration = block.timestamp - _lastStakedTime[msg.sender];
+        uint256 reward = (stakedAmount * ANNUAL_INTEREST * stakingDuration) / (100 * 365 days);
+        
+        _mint(msg.sender, stakedAmount + reward);
+        _stakingBalances[msg.sender] = 0;
+        emit Unstaked(msg.sender, stakedAmount + reward);
+    }
 }
 
